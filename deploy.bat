@@ -20,15 +20,20 @@ git commit -m "%commit_msg%"
 
 echo.
 echo 3. Pulling latest changes from GitHub...
-git pull origin main --rebase
-
-if %errorlevel% neq 0 (
-    echo.
-    echo [ERROR] Conflict detected or pull failed! 
-    echo Git has stopped to protect your changes.
-    echo Please resolve conflicts manually before pushing.
-    pause
-    exit /b
+:: Check if remote branch exists before pulling
+git fetch origin main
+if %errorlevel% equ 0 (
+    git pull origin main --rebase
+    if %errorlevel% neq 0 (
+        echo.
+        echo [ERROR] Conflict detected or pull failed! 
+        echo Git has stopped to protect your changes.
+        echo Please resolve conflicts manually before pushing.
+        pause
+        exit /b
+    )
+) else (
+    echo Remote 'main' branch not found. Skipping pull ^(assuming first push^).
 )
 
 echo.
