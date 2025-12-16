@@ -5,8 +5,10 @@ import react from '@vitejs/plugin-react';
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const host = process.env.TAURI_DEV_HOST;
+    const isGitHubPages = process.env.GITHUB_PAGES === 'true';
 
     return {
+      base: isGitHubPages ? '/CineViz/' : './',
       clearScreen: false,
       server: {
         port: 3000,
