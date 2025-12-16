@@ -1,0 +1,5 @@
+{
+  "name": "CineViz",
+  "description": "A cinematic video analysis tool based on Cinemetrics theory, offering rhythm analysis and visual color fingerprinting.",
+  "requestFramePermissions": []
+}
