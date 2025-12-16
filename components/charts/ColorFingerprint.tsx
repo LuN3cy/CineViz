@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { AnalysisData, Shot, Language } from '../../types';
 import { Button } from '../ui/Components';
-import { Download, Loader2, Copy, Check } from 'lucide-react';
+import { Download, Loader2, Copy, Check, FileImage } from 'lucide-react';
 
 interface ColorFingerprintProps {
   data: AnalysisData;
@@ -681,6 +681,39 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
       }
   }
 
+  const handleSvgExport = () => {
+    if (!svgRef.current || !data) return;
+    
+    try {
+        const serializer = new XMLSerializer();
+        let source = serializer.serializeToString(svgRef.current);
+
+        // Add name spaces if missing
+        if(!source.match(/^<svg[^>]+xmlns="http\:\/\/www\.w3\.org\/2000\/svg"/)){
+            source = source.replace(/^<svg/, '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        if(!source.match(/^<svg[^>]+xmlns:xlink="http\:\/\/www\.w3\.org\/1999\/xlink"/)){
+            source = source.replace(/^<svg/, '<svg xmlns:xlink="http://www.w3.org/1999/xlink"');
+        }
+
+        // Add XML declaration
+        source = '<?xml version="1.0" standalone="no"?>\r\n' + source;
+
+        // Convert svg source to URI data scheme.
+        const url = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(source);
+
+        const link = document.createElement('a');
+        link.download = `${data.fileName.replace(/\./g, '_')}_Fingerprint.svg`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    } catch (e) {
+        console.error("SVG Export failed", e);
+        alert("Failed to export SVG.");
+    }
+  };
+
   return (
     <div className="flex flex-col h-full w-full gap-6">
        {/* Chart Area */}
@@ -732,6 +765,14 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
                         {lang === 'zh' ? '复制图表' : 'Copy Image'}
                     </>
                 )}
+            </Button>
+            <Button 
+                onClick={handleSvgExport} 
+                disabled={isExporting || isCopying} 
+                className="h-14 px-8 text-base font-semibold shadow-2xl bg-dash-card border border-dash-border text-dash-textHigh hover:bg-dash-cardHover transition-all hover:scale-105 active:scale-95"
+            >
+                <FileImage className="mr-2" size={20} />
+                SVG
             </Button>
             <Button 
                 onClick={handleExport} 

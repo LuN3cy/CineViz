@@ -1,4 +1,4 @@
-# CineViz - Cinematic Analysis / 计量电影学可视化
+# CineViz - Cinematic Analysis / 视频风格数据可视化工具
 
 <div align="center">
   <img src="public/logo.svg" alt="Logo" width="120" height="120">
@@ -6,7 +6,7 @@
   <p align="center">
     A powerful tool for cinematic rhythm and visual analysis.
     <br />
-    一个强大的电影节奏与视觉分析工具。
+    基于计量电影学的视频节奏与视觉分析工具。
     <br />
     <br />
     <a href="https://LuN3cy.github.io/CineViz/"><strong>View Demo / 在线体验 »</strong></a>
