@@ -1,7 +1,7 @@
 # CineViz - Cinematic Analysis / 计量电影学可视化
 
 <div align="center">
-  <img src="public/vite.svg" alt="Logo" width="80" height="80">
+  <img src="public/logo.svg" alt="Logo" width="120" height="120">
   <h3 align="center">CineViz</h3>
   <p align="center">
     A powerful tool for cinematic rhythm and visual analysis.
@@ -71,9 +71,11 @@ Visit [https://LuN3cy.github.io/CineViz/](https://LuN3cy.github.io/CineViz/)
 - **Visualization**: Recharts, D3.js
 - **Desktop**: Tauri (Optional for local exe)
 
-## 📄 License / 许可证
+## Contact / 联系我们
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+- **Official Account公众号**: [LuN3cy的实验房](https://mp.weixin.qq.com/s/1234567890abcdef12345)
+- **RED小红书**: [LuN3cy](https://www.xiaohongshu.com/user/64f2f2000000000001000000)
+- **Bilibili**: [LuN3cy](https://space.bilibili.com/123456789)
 
 ---
 
