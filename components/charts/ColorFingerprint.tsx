@@ -8,9 +8,10 @@ interface ColorFingerprintProps {
   data: AnalysisData;
   isDark: boolean;
   lang: Language;
+  animated?: boolean;
 }
 
-export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark, lang }) => {
+export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark, lang, animated = false }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [isExporting, setIsExporting] = useState(false);
@@ -26,69 +27,68 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
     return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
   };
 
+  // Correct cleanup logic: use a ref for the timer
+  const timerRef = useRef<d3.Timer | null>(null);
+
   useEffect(() => {
+    // Stop previous timer if exists
+    if (timerRef.current) timerRef.current.stop();
+
     if (!containerRef.current || !svgRef.current || !data) return;
 
     const draw = () => {
-      const container = containerRef.current;
-      if (!container) return;
+       // Stop existing timer before redrawing
+       if (timerRef.current) timerRef.current.stop();
 
-      const width = container.clientWidth;
-      const height = container.clientHeight;
+       const container = containerRef.current;
+       if (!container) return;
+       
+       const width = container.clientWidth;
+       const height = container.clientHeight;
+       if (width === 0 || height === 0) return;
 
-      if (width === 0 || height === 0) return;
+       const svg = d3.select(svgRef.current);
+       svg.selectAll("*").remove();
+       svg.attr("width", "100%").attr("height", "100%");
 
-      const svg = d3.select(svgRef.current);
-      svg.selectAll("*").remove();
-
-      // Ensure SVG takes full space
-      svg.attr("width", "100%").attr("height", "100%");
-
-      // Calculate radius to fit container with some padding
-      const radius = Math.min(width, height) / 2 - 20;
-      const center = { x: width / 2, y: height / 2 };
-
-      const totalDuration = data.duration;
-      
-      const g = svg.append("g")
+       const radius = Math.min(width, height) / 2 - 20;
+       const center = { x: width / 2, y: height / 2 };
+       const totalDuration = data.duration;
+       
+       const g = svg.append("g")
         .attr("transform", `translate(${center.x},${center.y})`);
 
-      const angleScale = d3.scaleLinear()
+       const angleScale = d3.scaleLinear()
         .domain([0, totalDuration])
         .range([0, 2 * Math.PI]);
-
-      const maxDensity = d3.max(data.cuttingDensity, d => d.density) || 1;
-
-      // Helper to update tooltip position safely
-      const updateTooltip = (event: MouseEvent) => {
+        
+       const maxDensity = d3.max(data.cuttingDensity, d => d.density) || 1;
+       
+       const updateTooltip = (event: MouseEvent) => {
         const containerRect = container.getBoundingClientRect();
         setTooltipPos({
           x: event.clientX - containerRect.left,
           y: event.clientY - containerRect.top
         });
-      };
+       };
 
-      data.shots.forEach((shot, i) => {
-        const startAngle = angleScale(shot.startTime);
-        const endAngle = angleScale(shot.endTime);
-        
-        // Get average density for the shot duration
-        const density = data.cuttingDensity.find(d => d.time >= (shot.startTime + shot.endTime)/2)?.density || 0;
-        const normalizedDensity = density / maxDensity; // 0 to 1
-        
-        // --- UPDATED RADIUS LOGIC ---
-        // Inner radius is fixed (Complete Ring)
-        // Outer radius fluctuates with density
-        const baseInner = radius * 0.40;
-        const baseOuter = radius * 0.85; 
-        
-        // Offset based on density: Higher density = Thicker segment (extends outwards)
-        const densityOffset = normalizedDensity * (radius * 0.15); 
-        
-        const innerR = baseInner;
-        const outerR = baseOuter + densityOffset;
+       const paths: any[] = [];
 
-        const arcGenerator = d3.arc<any>()
+       data.shots.forEach((shot, i) => {
+         const startAngle = angleScale(shot.startTime);
+         const endAngle = angleScale(shot.endTime);
+         const density = data.cuttingDensity.find(d => d.time >= (shot.startTime + shot.endTime)/2)?.density || 0;
+         const normalizedDensity = density / maxDensity; 
+
+         const baseInner = radius * 0.40;
+         const baseOuter = radius * 0.85; 
+         // Increased variance
+         const densityOffset = normalizedDensity * (radius * 0.35); 
+         
+         const innerR = baseInner;
+         const outerR = baseOuter + densityOffset;
+
+         const arcGenerator = d3.arc<any>()
           .innerRadius(innerR)
           .outerRadius(outerR)
           .startAngle(startAngle)
@@ -96,12 +96,12 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
           .padAngle(0)
           .cornerRadius(0);
 
-        g.append("path")
+         const path = g.append("path")
           .attr("d", arcGenerator({}))
           .attr("fill", shot.dominantColor)
           .style("opacity", 1.0)
           .style("cursor", "crosshair")
-          .style("transition", "filter 0.1s ease")
+          .style("transition", "filter 0.1s ease") // Keep hover transition
           .on("mouseenter", function(event) {
              d3.select(this)
                .style("filter", "brightness(1.3) drop-shadow(0 0 4px rgba(255,255,255,0.5))")
@@ -120,25 +120,51 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
                .attr("stroke", "none");
              setHoveredShot(null);
           });
-      });
-      
-      // Aesthetic Center Circles
-      g.append("circle")
-        .attr("r", radius * 0.35) // Adjusted to fit new inner radius
+          
+         paths.push({ 
+             path, 
+             arcGenerator, 
+             baseInner, 
+             baseOuter, 
+             densityOffset, 
+             normalizedDensity, 
+             startAngle, 
+             endAngle 
+         });
+       });
+
+       // Animation Loop
+       if (animated) {
+           timerRef.current = d3.timer((elapsed) => {
+               paths.forEach((p, i) => {
+                   const freq = 0.002 + (p.normalizedDensity * 0.006);
+                   const amp = 5 + (p.normalizedDensity * 20);
+                   const wave = Math.sin(elapsed * freq + i * 0.1); 
+                   const animOffset = wave * amp;
+                   const newOuterR = Math.max(p.baseInner + 5, p.baseOuter + p.densityOffset + animOffset);
+                   
+                   p.arcGenerator.outerRadius(newOuterR);
+                   p.path.attr("d", p.arcGenerator({}));
+               });
+           });
+       }
+
+       // Aesthetic Center Circles
+       g.append("circle")
+        .attr("r", radius * 0.35)
         .attr("fill", "none")
         .attr("stroke", isDark ? "#1E1F24" : "#E5E7EB")
         .attr("stroke-width", 1)
         .attr("stroke-dasharray", "4 4")
         .style("pointer-events", "none");
 
-      // Center Text
-      const textGroup = g.append("g").style("pointer-events", "none");
-      
-      const displayName = data.fileName.length > 20 
+       // Center Text
+       const textGroup = g.append("g").style("pointer-events", "none");
+       const displayName = data.fileName.length > 20 
         ? data.fileName.substring(0, 17) + "..." 
         : data.fileName;
 
-      textGroup.append("text")
+       textGroup.append("text")
         .attr("text-anchor", "middle")
         .attr("dy", "-0.2em")
         .attr("fill", isDark ? "white" : "#111827")
@@ -147,7 +173,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
         .style("letter-spacing", "1px")
         .text("CINEVIZ");
         
-      textGroup.append("text")
+       textGroup.append("text")
         .attr("text-anchor", "middle")
         .attr("dy", "1.5em")
         .attr("fill", isDark ? "#4B5563" : "#6B7280")
@@ -157,13 +183,20 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
     };
 
     draw();
+    
     const observer = new ResizeObserver(() => draw());
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, [data, isDark]);
+    if (containerRef.current) {
+        observer.observe(containerRef.current);
+    }
+    
+    return () => {
+        if (timerRef.current) timerRef.current.stop();
+        observer.disconnect();
+    };
+  }, [data, isDark, animated]);
 
-  const generateReportCanvas = async (): Promise<HTMLCanvasElement> => {
-     // --- Setup A4 Canvas (High Res / 3x Scale for Retina Quality) ---
+     const generateReportCanvas = async (): Promise<HTMLCanvasElement> => {
+      // --- Setup A4 Canvas (High Res / 3x Scale for Retina Quality) ---
       const logicalWidth = 1200;
       const logicalHeight = 2050; // Increased height for spacing
       const scaleFactor = 3; 

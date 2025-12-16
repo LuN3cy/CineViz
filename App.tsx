@@ -78,7 +78,7 @@ const HomeBackgroundPreview = ({ isDark, loading }: { isDark: boolean; loading?:
                 : "opacity-10 grayscale border-dash-textHigh/20"
            )}>
               <div className="scale-75 w-full h-full">
-                <ColorFingerprint data={mockData} isDark={isDark} lang="en" />
+                <ColorFingerprint data={mockData} isDark={isDark} lang="en" animated={true} />
               </div>
           </div>
        </div>
@@ -99,6 +99,7 @@ const TRANS = {
     visual: "Visual",
     fingerprint: "Fingerprint",
     analysisActive: "Analysis Active",
+    analysisProcessing: "Processing...",
     modeShort: "Short Video / Auto-Detect",
     modeShortDesc: "Best for videos < 30 min. Uses visual algorithm to detect cuts automatically.",
     modeMovie: "Movie / EDL Import",
@@ -117,6 +118,7 @@ const TRANS = {
     visual: "视觉",
     fingerprint: "指纹",
     analysisActive: "分析完成",
+    analysisProcessing: "分析中...",
     modeShort: "短片 / 自动识别",
     modeShortDesc: "适合30分钟以内的短片。使用视觉算法自动识别镜头切分点。",
     modeMovie: "电影 / EDL 导入",
@@ -374,15 +376,18 @@ const App: React.FC = () => {
         
         {/* Top Right Controls */}
         <div className="flex items-center gap-4">
-           {data && (
+           {loading ? (
+             <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full bg-dash-card border border-dash-border">
+                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse"></div>
+                <span className="text-xs text-dash-text">{t.analysisProcessing}</span>
+             </div>
+           ) : data ? (
              <div className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full bg-dash-card border border-dash-border">
                 <div className="w-2 h-2 rounded-full bg-brand-success animate-pulse"></div>
                 <span className="text-xs text-dash-text">{t.analysisActive}</span>
              </div>
-           )}
-           <Button 
-             variant="icon" 
-             onClick={() => window.open('https://github.com/LuN3cy/CineViz', '_blank')} 
+           ) : null}
+           <Button variant="icon" onClick={() => window.open('https://github.com/LuN3cy/CineViz', '_blank')} 
              className="rounded-full w-10 h-10 p-0 flex items-center justify-center"
            >
              <Github size={18} />
@@ -540,7 +545,7 @@ const App: React.FC = () => {
           <div className="animate-message-pop h-full w-full p-2 lg:p-4">
              {/* Styled matching Visual Charts using GlassCard, but borderless */}
              <GlassCard className="h-full w-full flex flex-col p-2 lg:p-4 border-0">
-                 <ColorFingerprint data={data} isDark={isDark} lang={lang} />
+                 <ColorFingerprint data={data} isDark={isDark} lang={lang} animated={true} />
              </GlassCard>
           </div>
         )}
