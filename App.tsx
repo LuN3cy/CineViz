@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, BarChart2, Eye, Fingerprint as FingerprintIcon, Sun, Moon, Languages, Phone, X, Info, Box, FileText, Film, HelpCircle, CircleHelp } from 'lucide-react';
+import { Upload, BarChart2, Eye, Fingerprint as FingerprintIcon, Sun, Moon, Languages, Phone, X, Info, Box, FileText, Film, HelpCircle, CircleHelp, Github } from 'lucide-react';
 import { AnalysisData, ViewMode, Shot, Language } from './types';
 import { processVideo } from './services/videoProcessor';
 import { parseEDL } from './services/edlParser';
@@ -380,6 +380,13 @@ const App: React.FC = () => {
                 <span className="text-xs text-dash-text">{t.analysisActive}</span>
              </div>
            )}
+           <Button 
+             variant="icon" 
+             onClick={() => window.open('https://github.com/LuN3cy/CineViz', '_blank')} 
+             className="rounded-full w-10 h-10 p-0 flex items-center justify-center"
+           >
+             <Github size={18} />
+           </Button>
            <Button variant="icon" onClick={() => setShowContactModal(true)} className="rounded-full w-10 h-10 p-0 flex items-center justify-center">
              <CircleHelp size={18} />
            </Button>
