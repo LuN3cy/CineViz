@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Upload, BarChart2, Eye, Fingerprint as FingerprintIcon, Sun, Moon, Languages, Phone, X, Info, Box, FileText, Film, HelpCircle, CircleHelp, Github } from 'lucide-react';
+import { Upload, BarChart2, Eye, Fingerprint as FingerprintIcon, Sun, Moon, Languages, Phone, X, Info, Box, FileText, Film, HelpCircle, CircleHelp, Github, BookOpen } from 'lucide-react';
 import { AnalysisData, ViewMode, Shot, Language } from './types';
 import { processVideo } from './services/videoProcessor';
 import { parseEDL } from './services/edlParser';
@@ -100,6 +100,12 @@ const TRANS = {
     fingerprint: "Fingerprint",
     analysisActive: "Analysis Active",
     analysisProcessing: "Processing...",
+    algoIntro: "Algorithm",
+    docLink: "Docs",
+    contactAuthor: "Contact",
+    wechat: "WeChat",
+    xiaohongshu: "Xiaohongshu",
+    bilibili: "Bilibili",
     modeShort: "Short Video / Auto-Detect",
     modeShortDesc: "Best for videos < 30 min. Uses visual algorithm to detect cuts automatically.",
     modeMovie: "Movie / EDL Import",
@@ -119,6 +125,12 @@ const TRANS = {
     fingerprint: "指纹",
     analysisActive: "分析完成",
     analysisProcessing: "分析中...",
+    algoIntro: "算法介绍",
+    docLink: "说明文档",
+    contactAuthor: "联系作者",
+    wechat: "公众号",
+    xiaohongshu: "小红书",
+    bilibili: "Bilibili",
     modeShort: "短片 / 自动识别",
     modeShortDesc: "适合30分钟以内的短片。使用视觉算法自动识别镜头切分点。",
     modeMovie: "电影 / EDL 导入",
@@ -554,14 +566,23 @@ const App: React.FC = () => {
 
       <Navbar />
 
-      {/* Floating Action Button: About Algorithms */}
-      <div className="fixed bottom-8 right-8 z-50 hidden md:block">
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-8 right-8 z-50 hidden md:flex items-center gap-3">
          <Button 
-            variant="icon" 
+            variant="ghost" 
             onClick={() => setShowAlgoModal(true)}
-            className="rounded-full w-10 h-10 p-0 flex items-center justify-center shadow-xl"
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-dash-card/80 backdrop-blur-md border border-dash-border shadow-xl hover:bg-brand-primary/10 hover:border-brand-primary/50 transition-all group"
          >
-            <Info size={18} />
+            <Info size={18} className="text-dash-text group-hover:text-brand-primary" />
+            <span className="text-sm font-medium text-dash-text group-hover:text-brand-primary">{t.algoIntro}</span>
+         </Button>
+         <Button 
+            variant="ghost" 
+            onClick={() => window.open('https://mp.weixin.qq.com/s/ARt6U27GO8xowhiGTxBPrQ', '_blank')}
+            className="flex items-center gap-2 px-4 py-2 rounded-full bg-dash-card/80 backdrop-blur-md border border-dash-border shadow-xl hover:bg-brand-accent/10 hover:border-brand-accent/50 transition-all group"
+         >
+            <BookOpen size={18} className="text-dash-text group-hover:text-brand-accent" />
+            <span className="text-sm font-medium text-dash-text group-hover:text-brand-accent">{t.docLink}</span>
          </Button>
       </div>
 
@@ -602,7 +623,7 @@ const App: React.FC = () => {
                <div className="flex items-center justify-between mb-8">
                  <div className="flex items-center gap-3">
                     <Box size={24} className={isDark ? "text-white" : "text-gray-900"} />
-                    <h3 className={cn("text-lg font-bold tracking-wide", isDark ? "text-white" : "text-gray-900")}>联系作者</h3>
+                    <h3 className={cn("text-lg font-bold tracking-wide", isDark ? "text-white" : "text-gray-900")}>{t.contactAuthor}</h3>
                  </div>
                  <button 
                    onClick={handleCloseContact}
@@ -633,7 +654,7 @@ const App: React.FC = () => {
                        LuN3cy的实验房
                      </span>
                      <span className={cn("text-xs font-light", isDark ? "text-gray-400" : "text-gray-500")}>
-                       公众号
+                       {t.wechat}
                      </span>
                   </a>
 
@@ -653,7 +674,7 @@ const App: React.FC = () => {
                        LuN3cy
                      </span>
                      <span className={cn("text-xs font-light", isDark ? "text-gray-400" : "text-gray-500")}>
-                       小红书
+                       {t.xiaohongshu}
                      </span>
                   </a>
 
@@ -673,7 +694,7 @@ const App: React.FC = () => {
                        LuN3cy
                      </span>
                      <span className={cn("text-xs font-light", isDark ? "text-gray-400" : "text-gray-500")}>
-                       Bilibili
+                       {t.bilibili}
                      </span>
                   </a>
                </div>
