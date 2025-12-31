@@ -7,6 +7,44 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export type CsvPrimitive = string | number | boolean | null | undefined;
+
+const csvEscape = (value: CsvPrimitive) => {
+  const s = value === null || value === undefined ? '' : String(value);
+  if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+};
+
+export const rowsToCsv = (rows: Array<Record<string, CsvPrimitive>>, headers?: string[]) => {
+  const cols = headers && headers.length > 0
+    ? headers
+    : rows.length > 0
+      ? Object.keys(rows[0])
+      : [];
+
+  const headerLine = cols.map(csvEscape).join(',');
+  const dataLines = rows.map((row) => cols.map((k) => csvEscape(row[k])).join(','));
+  return [headerLine, ...dataLines].join('\r\n');
+};
+
+export const downloadTextFile = (filename: string, content: string, mimeType: string) => {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
+export const downloadCsv = (opts: { filename: string; rows: Array<Record<string, CsvPrimitive>>; headers?: string[]; includeBom?: boolean }) => {
+  const csv = rowsToCsv(opts.rows, opts.headers);
+  const content = (opts.includeBom ?? true) ? `\uFEFF${csv}` : csv;
+  downloadTextFile(opts.filename, content, 'text/csv;charset=utf-8');
+};
+
 interface GlassCardProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   active?: boolean;

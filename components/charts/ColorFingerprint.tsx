@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { AnalysisData, Shot, Language } from '../../types';
-import { Button } from '../ui/Components';
+import { Button, downloadCsv } from '../ui/Components';
 import { Download, Loader2, Copy, Check, FileImage } from 'lucide-react';
 
 interface ColorFingerprintProps {
@@ -51,7 +51,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
        svg.selectAll("*").remove();
        svg.attr("width", "100%").attr("height", "100%");
 
-       const radius = Math.min(width, height) / 2 - 20;
+       const radius = Math.min(width, height) / 2;
        const center = { x: width / 2, y: height / 2 };
        const totalDuration = data.duration;
        
@@ -80,13 +80,12 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
          const density = data.cuttingDensity.find(d => d.time >= (shot.startTime + shot.endTime)/2)?.density || 0;
          const normalizedDensity = density / maxDensity; 
 
-         const baseInner = radius * 0.40;
-         const baseOuter = radius * 0.85; 
-         // Increased variance
-         const densityOffset = normalizedDensity * (radius * 0.35); 
+         const baseInner = radius * 0.35;
+         const baseOuter = radius * 0.82;
+         const densityOffset = normalizedDensity * (radius * 0.12);
          
          const innerR = baseInner;
-         const outerR = baseOuter + densityOffset;
+         const outerR = Math.min(radius, baseOuter + densityOffset);
 
          const arcGenerator = d3.arc<any>()
           .innerRadius(innerR)
@@ -138,11 +137,11 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
            timerRef.current = d3.timer((elapsed) => {
                paths.forEach((p, i) => {
                    const freq = 0.002 + (p.normalizedDensity * 0.006);
-                   const amp = 5 + (p.normalizedDensity * 20);
+                   const amp = (4 + (p.normalizedDensity * 16)) * (radius / 320);
                    const wave = Math.sin(elapsed * freq + i * 0.1); 
                    const animOffset = wave * amp;
-                   const newOuterR = Math.max(p.baseInner + 5, p.baseOuter + p.densityOffset + animOffset);
-                   
+                   const newOuterR = Math.min(radius, Math.max(p.baseInner + 5, p.baseOuter + p.densityOffset + animOffset));
+                
                    p.arcGenerator.outerRadius(newOuterR);
                    p.path.attr("d", p.arcGenerator({}));
                });
@@ -151,7 +150,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
 
        // Aesthetic Center Circles
        g.append("circle")
-        .attr("r", radius * 0.35)
+        .attr("r", radius * 0.32)
         .attr("fill", "none")
         .attr("stroke", isDark ? "#1E1F24" : "#E5E7EB")
         .attr("stroke-width", 1)
@@ -168,7 +167,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
         .attr("text-anchor", "middle")
         .attr("dy", "-0.2em")
         .attr("fill", isDark ? "white" : "#111827")
-        .style("font-size", "14px")
+        .style("font-size", `${Math.max(12, radius * 0.048)}px`)
         .style("font-weight", "bold")
         .style("letter-spacing", "1px")
         .text("CINEVIZ");
@@ -177,7 +176,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
         .attr("text-anchor", "middle")
         .attr("dy", "1.5em")
         .attr("fill", isDark ? "#4B5563" : "#6B7280")
-        .style("font-size", "10px")
+        .style("font-size", `${Math.max(10, radius * 0.032)}px`)
         .style("font-family", "monospace")
         .text(displayName);
     };
@@ -357,9 +356,9 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
         const normalizedDensity = getDensityAt(midTime) / maxDensity;
         
         // Updated Export Logic: Fixed Inner, Variable Outer
-        const baseInner = fpRadius * 0.40;
-        const baseOuter = fpRadius * 0.85;
-        const densityOffset = normalizedDensity * 45;
+        const baseInner = fpRadius * 0.35;
+        const baseOuter = fpRadius * 0.82;
+        const densityOffset = normalizedDensity * (fpRadius * 0.12);
 
         ctx.fillStyle = shot.dominantColor;
         ctx.beginPath();
@@ -676,6 +675,29 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
       return canvas;
   };
 
+  const handleCsvExport = () => {
+    const baseName = data.fileName.replace(/\./g, '_');
+    const maxDensity = d3.max(data.cuttingDensity, (d) => d.density) || 1;
+    const getDensityAt = (time: number) => data.cuttingDensity.find((d) => d.time >= time)?.density || 0;
+
+    downloadCsv({
+      filename: `${baseName}_fingerprint.csv`,
+      rows: data.shots.map((s) => {
+        const midTime = (s.startTime + s.endTime) / 2;
+        const densityAtMid = getDensityAt(midTime);
+        return {
+          id: s.id,
+          startTime: s.startTime,
+          endTime: s.endTime,
+          duration: s.duration,
+          dominantColor: s.dominantColor,
+          densityAtMid,
+          normalizedDensity: maxDensity ? densityAtMid / maxDensity : 0
+        };
+      })
+    });
+  };
+
   const handleExport = async () => {
     setIsExporting(true);
     try {
@@ -748,11 +770,20 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
   };
 
   return (
-    <div className="flex flex-col h-full w-full gap-6">
+    <div className="flex flex-col h-full w-full gap-4">
        {/* Chart Area */}
-       <div className="relative flex-1 w-full min-h-0 rounded-2xl">
+       <div className="relative flex-1 w-full min-h-0 rounded-2xl overflow-hidden">
+           <Button
+             variant="icon"
+             title={lang === 'zh' ? '导出 CSV' : 'Export CSV'}
+             onClick={handleCsvExport}
+             disabled={isExporting || isCopying}
+             className="absolute top-4 right-4 z-30 h-10 w-10 bg-dash-card/80 backdrop-blur-md"
+           >
+             <Download size={18} />
+           </Button>
            <div ref={containerRef} className="w-full h-full flex items-center justify-center relative z-10">
-              <svg ref={svgRef} className="w-full h-full overflow-visible" />
+              <svg ref={svgRef} className="w-full h-full" />
            </div>
 
            {/* Hover Tooltip rendered here in DOM */}
@@ -781,7 +812,7 @@ export const ColorFingerprint: React.FC<ColorFingerprintProps> = ({ data, isDark
        </div>
 
        {/* Export Button Section */}
-       <div className="shrink-0 flex justify-center pb-2 gap-4">
+       <div className="relative z-30 shrink-0 flex justify-center pb-2 gap-4">
             <Button 
                 onClick={handleCopy} 
                 disabled={isCopying || isExporting} 

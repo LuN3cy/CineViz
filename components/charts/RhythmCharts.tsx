@@ -4,8 +4,8 @@ import {
   ReferenceLine, AreaChart, Area, CartesianGrid, Cell
 } from 'recharts';
 import { AnalysisData, Language } from '../../types';
-import { GlassCard } from '../ui/Components';
-import { Timer, Scissors, Activity, Film } from 'lucide-react';
+import { Button, GlassCard, downloadCsv } from '../ui/Components';
+import { Timer, Scissors, Activity, Film, Download } from 'lucide-react';
 
 interface RhythmChartsProps {
   data: AnalysisData;
@@ -44,6 +44,8 @@ const STRINGS = {
 
 export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang = 'en' }) => {
   const t = STRINGS[lang];
+  const exportTitle = lang === 'zh' ? '导出 CSV' : 'Export CSV';
+  const baseName = data.fileName.replace(/\./g, '_');
 
   const shotData = data.shots.map(s => ({
     id: s.id,
@@ -81,6 +83,22 @@ export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang =
         
         {/* Combined ASL/MSL Panel */}
         <GlassCard className="flex flex-col justify-center" noPadding>
+          <Button
+            variant="icon"
+            title={exportTitle}
+            onClick={() => downloadCsv({
+              filename: `${baseName}_pacing.csv`,
+              rows: [{
+                asl: data.asl,
+                msl: data.msl,
+                totalShots: data.shots.length,
+                duration: data.duration
+              }]
+            })}
+            className="absolute top-4 right-4 z-20 h-10 w-10"
+          >
+            <Download size={18} />
+          </Button>
           <div className="p-6">
             <div className="flex items-center gap-2 mb-4">
                 <div className="p-1.5 rounded-lg bg-dash-textHigh/5 border border-dash-textHigh/5">
@@ -125,12 +143,22 @@ export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang =
           value={data.shots.length.toString()}
           subValue={t.cutsDetected}
           icon={<Scissors className="text-brand-success" size={20} />}
+          exportTitle={exportTitle}
+          onExportCsv={() => downloadCsv({
+            filename: `${baseName}_total_shots.csv`,
+            rows: [{ totalShots: data.shots.length }]
+          })}
         />
         <StatCard 
           title={t.totalDuration}
           value={formatTime(data.duration)}
           subValue={t.videoLength}
           icon={<Film className="text-blue-400" size={20} />}
+          exportTitle={exportTitle}
+          onExportCsv={() => downloadCsv({
+            filename: `${baseName}_total_duration.csv`,
+            rows: [{ duration: data.duration, durationFormatted: formatTime(data.duration) }]
+          })}
         />
       </div>
 
@@ -144,16 +172,35 @@ export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang =
             </div>
             
             {/* Chart Legend */}
-            <div className="flex items-center gap-4 text-xs">
-               <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: aslColor }}></div>
-                  <span className="text-dash-text">ASL</span>
-               </div>
-               <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: mslColor }}></div>
-                  <span className="text-dash-text">MSL</span>
-               </div>
-               <span className="px-2 py-1 rounded bg-brand-accent/10 text-brand-accent border border-brand-accent/20">Histogram</span>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-4 text-xs">
+                 <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: aslColor }}></div>
+                    <span className="text-dash-text">ASL</span>
+                 </div>
+                 <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-0.5 border-t-2 border-dashed" style={{ borderColor: mslColor }}></div>
+                    <span className="text-dash-text">MSL</span>
+                 </div>
+                 <span className="px-2 py-1 rounded bg-brand-accent/10 text-brand-accent border border-brand-accent/20">Histogram</span>
+              </div>
+              <Button
+                variant="icon"
+                title={exportTitle}
+                onClick={() => downloadCsv({
+                  filename: `${baseName}_shots.csv`,
+                  rows: data.shots.map((s) => ({
+                    id: s.id,
+                    startTime: s.startTime,
+                    endTime: s.endTime,
+                    duration: s.duration,
+                    dominantColor: s.dominantColor
+                  }))
+                })}
+                className="h-10 w-10"
+              >
+                <Download size={18} />
+              </Button>
             </div>
           </div>
           
@@ -182,9 +229,25 @@ export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang =
 
         {/* Cutting Density Curve */}
         <GlassCard className="lg:col-span-1 h-[400px]">
-          <div className="mb-6">
-            <h3 className="text-lg font-medium text-dash-textHigh">{t.rhythm}</h3>
-            <p className="text-xs text-dash-text mt-1">{t.rhythmSub}</p>
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <h3 className="text-lg font-medium text-dash-textHigh">{t.rhythm}</h3>
+              <p className="text-xs text-dash-text mt-1">{t.rhythmSub}</p>
+            </div>
+            <Button
+              variant="icon"
+              title={exportTitle}
+              onClick={() => downloadCsv({
+                filename: `${baseName}_cutting_density.csv`,
+                rows: data.cuttingDensity.map((d) => ({
+                  time: d.time,
+                  density: d.density
+                }))
+              })}
+              className="h-10 w-10"
+            >
+              <Download size={18} />
+            </Button>
           </div>
           <ResponsiveContainer width="100%" height="80%">
             <AreaChart data={densityData}>
@@ -210,14 +273,37 @@ export const RhythmCharts: React.FC<RhythmChartsProps> = ({ data, isDark, lang =
   );
 };
 
-const StatCard = ({ title, value, subValue, icon }: any) => (
+const StatCard = ({
+  title,
+  value,
+  subValue,
+  icon,
+  exportTitle,
+  onExportCsv
+}: {
+  title: string;
+  value: string;
+  subValue: string;
+  icon: React.ReactNode;
+  exportTitle?: string;
+  onExportCsv?: () => void;
+}) => (
   <GlassCard className="flex flex-col gap-4" noPadding>
     <div className="p-5">
       <div className="flex justify-between items-start mb-2">
         <div className="p-2 rounded-lg bg-dash-textHigh/5 border border-dash-textHigh/5">
           {icon}
         </div>
-        <span className="text-xs font-mono text-dash-text uppercase tracking-wider bg-dash-textHigh/5 px-2 py-1 rounded">Metric</span>
+        {onExportCsv && (
+          <Button
+            variant="icon"
+            title={exportTitle}
+            onClick={onExportCsv}
+            className="h-9 w-9 p-2"
+          >
+            <Download size={16} />
+          </Button>
+        )}
       </div>
       <div>
         <div className="text-3xl font-bold text-dash-textHigh tracking-tight">{value}</div>

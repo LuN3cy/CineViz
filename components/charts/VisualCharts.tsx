@@ -3,8 +3,8 @@ import {
   LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, ResponsiveContainer
 } from 'recharts';
 import { AnalysisData, PaletteItem, Language } from '../../types';
-import { Button, GlassCard, Loader, cn } from '../ui/Components';
-import { Palette, Sun, Contrast, MousePointer2 } from 'lucide-react';
+import { Button, GlassCard, Loader, cn, downloadCsv } from '../ui/Components';
+import { Palette, Sun, Contrast, MousePointer2, Download } from 'lucide-react';
 
 interface VisualChartsProps {
   data: AnalysisData;
@@ -36,6 +36,8 @@ const STRINGS = {
 export const VisualCharts: React.FC<VisualChartsProps> = ({ data, isDark, lang = 'en' }) => {
   const [hoverPaletteItem, setHoverPaletteItem] = useState<PaletteItem | null>(null);
   const t = STRINGS[lang];
+  const exportTitle = lang === 'zh' ? '导出 CSV' : 'Export CSV';
+  const baseName = data.fileName.replace(/\./g, '_');
 
   // Downsample frames for line chart performance
   const lineData = data.frames.filter((_, i) => i % 5 === 0).map(f => ({
@@ -67,9 +69,26 @@ export const VisualCharts: React.FC<VisualChartsProps> = ({ data, isDark, lang =
       
       {/* Color Palette Row */}
       <GlassCard className="min-h-[220px] flex flex-col justify-center relative overflow-visible">
-        <div className="flex items-center gap-2 mb-6">
-            <Palette className="text-brand-secondary" size={20} />
-            <h3 className="text-lg font-medium text-dash-textHigh">{t.palette}</h3>
+        <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-2">
+              <Palette className="text-brand-secondary" size={20} />
+              <h3 className="text-lg font-medium text-dash-textHigh">{t.palette}</h3>
+            </div>
+            <Button
+              variant="icon"
+              title={exportTitle}
+              onClick={() => downloadCsv({
+                filename: `${baseName}_palette.csv`,
+                rows: data.palette.map((item, idx) => ({
+                  index: idx + 1,
+                  color: item.color,
+                  thumbnail: item.thumbnail
+                }))
+              })}
+              className="h-10 w-10"
+            >
+              <Download size={18} />
+            </Button>
         </div>
         
         <div className="flex flex-col md:flex-row items-center justify-center gap-8">
@@ -128,6 +147,23 @@ export const VisualCharts: React.FC<VisualChartsProps> = ({ data, isDark, lang =
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Polar Scatter Plot */}
         <GlassCard className="lg:col-span-1 h-[400px]">
+          <Button
+            variant="icon"
+            title={exportTitle}
+            onClick={() => downloadCsv({
+              filename: `${baseName}_polar.csv`,
+              rows: data.polarData.map((p, idx) => ({
+                index: idx + 1,
+                time: p.time,
+                hue: p.hue,
+                saturation: p.saturation,
+                color: p.color
+              }))
+            })}
+            className="absolute top-4 right-4 z-20 h-10 w-10"
+          >
+            <Download size={18} />
+          </Button>
           <div className="flex flex-col items-center justify-center h-full w-full">
             <h3 className="text-lg font-medium text-dash-textHigh mb-2 text-center">{t.polar}</h3>
             <p className="text-[10px] text-dash-text mb-6 text-center">{t.polarSub}</p>
@@ -171,13 +207,32 @@ export const VisualCharts: React.FC<VisualChartsProps> = ({ data, isDark, lang =
         <GlassCard className="lg:col-span-2 h-[400px]">
           <div className="flex justify-between items-center mb-6">
             <h3 className="text-lg font-medium text-dash-textHigh">{t.dynamics}</h3>
-            <div className="flex gap-4 text-xs">
-              <span className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#A855F7]/10 border border-[#A855F7]/20 text-[#A855F7]">
-                <Contrast size={12} /> {t.sat}
-              </span>
-              <span className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#FBBF24]/10 border border-[#FBBF24]/20 text-[#FBBF24]">
-                <Sun size={12} /> {t.bright}
-              </span>
+            <div className="flex items-center gap-3">
+              <div className="flex gap-4 text-xs">
+                <span className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#A855F7]/10 border border-[#A855F7]/20 text-[#A855F7]">
+                  <Contrast size={12} /> {t.sat}
+                </span>
+                <span className="flex items-center gap-2 px-3 py-1 rounded-full bg-[#FBBF24]/10 border border-[#FBBF24]/20 text-[#FBBF24]">
+                  <Sun size={12} /> {t.bright}
+                </span>
+              </div>
+              <Button
+                variant="icon"
+                title={exportTitle}
+                onClick={() => downloadCsv({
+                  filename: `${baseName}_frames.csv`,
+                  rows: data.frames.map((f) => ({
+                    time: f.time,
+                    hue: f.hue,
+                    saturation: f.saturation,
+                    brightness: f.brightness,
+                    hex: f.hex
+                  }))
+                })}
+                className="h-10 w-10"
+              >
+                <Download size={18} />
+              </Button>
             </div>
           </div>
           <ResponsiveContainer width="100%" height="80%">

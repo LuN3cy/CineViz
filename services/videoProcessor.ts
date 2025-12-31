@@ -49,6 +49,15 @@ const workerScript = `
 
     // Init Sums for Average
     let rSum = 0, gSum = 0, bSum = 0;
+
+    // Init 8x6 luma blocks (robust for low-sat / low-light)
+    const blockCols = 8;
+    const blockRows = 6;
+    const blockW = Math.floor(width / blockCols);
+    const blockH = Math.floor(height / blockRows);
+    const blockCount = blockCols * blockRows;
+    const lumaSums = new Array(blockCount).fill(0);
+    const lumaCounts = new Array(blockCount).fill(0);
     
     // Loop stride = 4 (every pixel). 
     for (let i = 0; i < data.length; i += 4) {
@@ -81,6 +90,13 @@ const workerScript = `
         z.g += g;
         z.b += b;
         z.count++;
+
+        const bx = Math.min(blockCols - 1, Math.floor(x / blockW));
+        const by = Math.min(blockRows - 1, Math.floor(y / blockH));
+        const bIdx = by * blockCols + bx;
+        const luma = (54 * r + 183 * g + 19 * b) >> 8;
+        lumaSums[bIdx] += luma;
+        lumaCounts[bIdx] += 1;
     }
 
     const rAvg = Math.floor(rSum / pixelCount);
@@ -96,9 +112,12 @@ const workerScript = `
         b: z.count ? Math.floor(z.b / z.count) : 0
     }));
 
+    const lumaBlocks = lumaSums.map((sum, idx) => lumaCounts[idx] ? sum / lumaCounts[idx] : 0);
+
     self.postMessage({
         histogram: currentHistogram,
         structure,
+        lumaBlocks,
         hexColor,
         hsb,
         rAvg, gAvg, bAvg
@@ -137,6 +156,156 @@ const calculateStructureDiff = (s1: RGB[], s2: RGB[]) => {
     }
     // Max diff per channel is 255. Total max is 9 * 3 * 255.
     return diff / (9 * 3 * 255);
+};
+
+const calculateLumaBlockDiff = (b1: number[], b2: number[]) => {
+  if (b1.length !== b2.length) return 0;
+  let diff = 0;
+  for (let i = 0; i < b1.length; i++) {
+    diff += Math.abs(b1[i] - b2[i]);
+  }
+  return diff / (b1.length * 255);
+};
+
+let cachedOrt: any = null;
+let cachedTransNetSession: any = null;
+
+const getTransNetSession = async () => {
+  if (cachedTransNetSession) return { ort: cachedOrt, session: cachedTransNetSession };
+  const ort = (await import('onnxruntime-web')) as any;
+  const base = 'https://huggingface.co/elya5/transnetv2/resolve/main/';
+  const candidates = ['transnetv2.onnx', 'model.onnx', 'transnetv2_onnx.onnx'];
+  for (const name of candidates) {
+    try {
+      const session = await ort.InferenceSession.create(`${base}${name}`, { executionProviders: ['wasm'] });
+      cachedOrt = ort;
+      cachedTransNetSession = session;
+      return { ort, session };
+    } catch {
+    }
+  }
+  return null;
+};
+
+const seekTo = (video: HTMLVideoElement, time: number, signal?: AbortSignal) => {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+      return;
+    }
+    const onAbort = () => {
+      cleanup();
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+    const onSeeked = () => {
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      video.removeEventListener('seeked', onSeeked);
+      signal?.removeEventListener('abort', onAbort);
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    video.addEventListener('seeked', onSeeked, { once: true });
+    const safeTime = Math.max(0, Math.min(video.duration ? video.duration - 0.001 : time, time));
+    video.currentTime = safeTime;
+  });
+};
+
+const extractFrameTensor = (video: HTMLVideoElement, canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D) => {
+  const w = 48;
+  const h = 27;
+  canvas.width = w;
+  canvas.height = h;
+  ctx.drawImage(video, 0, 0, w, h);
+  const { data } = ctx.getImageData(0, 0, w, h);
+  const out = new Float32Array(w * h * 3);
+  let j = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    out[j++] = data[i] / 255;
+    out[j++] = data[i + 1] / 255;
+    out[j++] = data[i + 2] / 255;
+  }
+  return out;
+};
+
+const detectCutsWithTransNetV2 = async (
+  video: HTMLVideoElement,
+  signal: AbortSignal | undefined,
+  duration: number,
+  onProgress: (progress: number) => void
+) => {
+  const loaded = await getTransNetSession();
+  if (!loaded) return null;
+  const { ort, session } = loaded;
+
+  const fps = duration <= 10 * 60 ? 8 : duration <= 30 * 60 ? 5 : duration <= 90 * 60 ? 3 : 2;
+  const totalFrames = Math.max(1, Math.floor(duration * fps) + 1);
+  const preds = new Float32Array(totalFrames);
+
+  const tmpCanvas = document.createElement('canvas');
+  const tmpCtx = tmpCanvas.getContext('2d', { willReadFrequently: true });
+  if (!tmpCtx) return null;
+
+  const inputName = session.inputNames?.[0] || 'input';
+  const outputNames: string[] = session.outputNames || [];
+
+  const windowSize = 100;
+  const step = 50;
+  const centralStart = 25;
+  const centralLen = 50;
+
+  for (let start = 0; start < totalFrames; start += step) {
+    if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+
+    const inputData = new Float32Array(windowSize * 27 * 48 * 3);
+    for (let k = 0; k < windowSize; k++) {
+      const frameIndex = Math.min(totalFrames - 1, start + k);
+      const t = frameIndex / fps;
+      await seekTo(video, t, signal);
+      const frame = extractFrameTensor(video, tmpCanvas, tmpCtx);
+      inputData.set(frame, k * 27 * 48 * 3);
+      if (k % 10 === 0) {
+        onProgress(Math.min(99, Math.round((frameIndex / totalFrames) * 100)));
+      }
+    }
+
+    const tensor = new ort.Tensor('float32', inputData, [1, windowSize, 27, 48, 3]);
+    const feeds: any = {};
+    feeds[inputName] = tensor;
+    const results = await session.run(feeds);
+
+    const outs = outputNames.length > 0 ? outputNames.map((n) => results[n]) : Object.values(results);
+    const outA: any = outs[0];
+    const outB: any = outs[1];
+    const dataA: Float32Array | number[] | undefined = outA?.data;
+    const dataB: Float32Array | number[] | undefined = outB?.data;
+
+    for (let i = 0; i < centralLen; i++) {
+      const localIdx = centralStart + i;
+      const globalIdx = start + localIdx;
+      if (globalIdx >= totalFrames) break;
+      const a = dataA ? Number((dataA as any)[localIdx]) : 0;
+      const b = dataB ? Number((dataB as any)[localIdx]) : 0;
+      const p = Math.max(a, b);
+      if (p > preds[globalIdx]) preds[globalIdx] = p;
+    }
+  }
+
+  const threshold = 0.55;
+  const cuts: number[] = [];
+  let lastCut = -999;
+  for (let i = 1; i < totalFrames - 1; i++) {
+    const p = preds[i];
+    if (p < threshold) continue;
+    if (p < preds[i - 1] || p < preds[i + 1]) continue;
+    const t = i / fps;
+    if (t - lastCut < 0.35) continue;
+    cuts.push(t);
+    lastCut = t;
+  }
+
+  return cuts.length > 0 ? cuts : null;
 };
 
 export const processVideo = async (
@@ -186,6 +355,18 @@ export const processVideo = async (
 
     video.onloadeddata = async () => {
       const duration = video.duration;
+
+      if (!isEdlMode) {
+        try {
+          const aiCuts = await detectCutsWithTransNetV2(video, signal, duration, (p) => onProgress(Math.min(60, Math.round(p * 0.6))));
+          if (aiCuts && aiCuts.length > 0) {
+            isEdlMode = true;
+            normalizedEdlCuts = [0, ...aiCuts].filter((t) => t >= 0 && t < duration).sort((a, b) => a - b);
+            normalizedEdlCuts = normalizedEdlCuts.filter((t, idx) => idx === 0 || Math.abs(t - normalizedEdlCuts[idx - 1]) > 0.2);
+          }
+        } catch (e) {
+        }
+      }
       
       const width = 64; 
       const height = 36;
@@ -201,6 +382,8 @@ export const processVideo = async (
       let prevHistogram: Histogram | null = null;
       let prevHsb: { h: number, s: number, b: number } | null = null;
       let prevStructure: RGB[] | null = null;
+      let prevLumaBlocks: number[] | null = null;
+      const lumaDiffHistory: number[] = [];
       
       let currentShotBest = {
         saturation: -1,
@@ -259,8 +442,8 @@ export const processVideo = async (
              }
              if (endTime > duration) endTime = duration;
              
-             // Skip extremely short shots (< 0.1s) to avoid seeking errors
-             if (endTime - startTime < 0.1) {
+             // Skip extremely short shots (< 0.01s) to avoid seeking errors, but be more permissive than before
+             if (endTime - startTime < 0.01) {
                  currentEdlShotIndex++;
                  processStep(); // Recurse
                  return;
@@ -317,7 +500,7 @@ export const processVideo = async (
       };
 
       worker.onmessage = (e) => {
-         const { histogram, structure, hexColor, hsb, rAvg, gAvg, bAvg } = e.data;
+         const { histogram, structure, lumaBlocks, hexColor, hsb, rAvg, gAvg, bAvg } = e.data;
          
          if (isEdlMode) {
              // --- EDL MODE LOGIC ---
@@ -373,33 +556,50 @@ export const processVideo = async (
              // 1. Shot Boundary Detection
              let isCut = false;
 
-             if (prevHistogram && prevHsb && prevStructure) {
+             if (prevHistogram && prevHsb && prevStructure && prevLumaBlocks) {
                 const histDiff = calculateHistogramDiff(prevHistogram, histogram, pixelCount);
                 const structDiff = calculateStructureDiff(prevStructure, structure);
+                const lumaDiff = calculateLumaBlockDiff(prevLumaBlocks, lumaBlocks);
                 
                 // DYNAMIC THRESHOLD STRATEGY
                 const timeSinceLastCut = currentTime - lastShotTime;
                 
                 // 1. Base Thresholds
-                let histThreshold = 0.30;
-                let structThreshold = 0.25; 
+                let histThreshold = 0.32;
+                let structThreshold = 0.26;
+                let lumaThreshold = 0.14;
 
                 // 2. Debounce 
-                if (timeSinceLastCut < 1.5) {
-                    histThreshold = 0.45;
-                    structThreshold = 0.40;
+                if (timeSinceLastCut < 1.0) {
+                    histThreshold = 0.55;
+                    structThreshold = 0.50;
+                    lumaThreshold = 0.22;
+                } else if (timeSinceLastCut < 1.5) {
+                    histThreshold = 0.48;
+                    structThreshold = 0.42;
+                    lumaThreshold = 0.18;
                 }
 
-                // 3. Dark Scene Protection
-                if (prevHsb.b < 15 && hsb.b < 15) {
-                    if (histDiff < 0.6 && structDiff < 0.6) {
-                        histThreshold = 0.6; 
-                        structThreshold = 0.6;
-                    }
+                const isDark = prevHsb.b < 18 && hsb.b < 18;
+                const isLowSat = prevHsb.s < 12 && hsb.s < 12;
+                if (isDark || isLowSat) {
+                  histThreshold = Math.max(histThreshold, 0.45);
+                  structThreshold = Math.max(structThreshold, 0.28);
+                  lumaThreshold = Math.min(lumaThreshold, 0.11);
                 }
+
+                lumaDiffHistory.push(lumaDiff);
+                if (lumaDiffHistory.length > 6) lumaDiffHistory.shift();
+
+                const recentAvg = lumaDiffHistory.reduce((acc, v) => acc + v, 0) / lumaDiffHistory.length;
 
                 // 4. Combine Logic
-                if (histDiff > histThreshold || structDiff > structThreshold) { 
+                if (
+                  lumaDiff > lumaThreshold ||
+                  (histDiff > histThreshold && structDiff > structThreshold) ||
+                  (structDiff > structThreshold * 1.25 && histDiff > histThreshold * 0.85) ||
+                  (timeSinceLastCut > 2.0 && recentAvg > 0.11 && (histDiff > 0.20 || structDiff > 0.16))
+                ) { 
                     isCut = true;
                 }
              }
@@ -407,6 +607,7 @@ export const processVideo = async (
              prevHistogram = histogram;
              prevHsb = hsb;
              prevStructure = structure;
+             prevLumaBlocks = lumaBlocks;
     
              if (isCut) {
                  shots.push({
@@ -420,6 +621,7 @@ export const processVideo = async (
                  
                  shotCounter++;
                  lastShotTime = currentTime;
+                 lumaDiffHistory.length = 0;
                  
                  // Reset Best Frame
                  currentShotBest = { saturation: -1, color: '#000000', thumbnail: '' };

@@ -554,9 +554,9 @@ const App: React.FC = () => {
         )}
 
         {view === ViewMode.FINGERPRINT && data && (
-          <div className="animate-message-pop h-full w-full p-2 lg:p-4">
+          <div className="animate-message-pop h-full w-full p-1 lg:p-2">
              {/* Styled matching Visual Charts using GlassCard, but borderless */}
-             <GlassCard className="h-full w-full flex flex-col p-2 lg:p-4 border-0">
+             <GlassCard className="h-full w-full flex flex-col p-1 lg:p-2 border-0">
                  <ColorFingerprint data={data} isDark={isDark} lang={lang} animated={true} />
              </GlassCard>
           </div>
