@@ -1,4 +1,4 @@
-# CineViz - Cinematic Analysis / 视频风格数据可视化工具
+# CineViz - Video Analysis based on Cinemetrics / 基于计量电影学的视频风格数据可视化工具
 
 <div align="center">
   <img src="public/logo.svg" alt="Logo" width="120" height="120">
